@@ -1,0 +1,145 @@
+.chart-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.chart-modal {
+  position: relative;
+  width: 100%;
+  max-width: 900px;
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 14px;
+  padding: 24px;
+  color: #e8edf5;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.chart-modal h2 {
+  margin: 0 0 14px;
+  font-size: 20px;
+  padding-right: 30px;
+}
+.chart-sym {
+  color: #6a7288;
+  font-size: 14px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.chart-close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: #6a7288;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+.chart-close:hover {
+  color: #e8edf5;
+}
+
+.chart-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.chart-stats div {
+  background: #11131a;
+  border: 1px solid #2a2d3a;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.chart-stats span {
+  display: block;
+  color: #6a7288;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+.chart-stats strong {
+  font-size: 17px;
+}
+
+.chart-controls {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.chart-seg {
+  display: inline-flex;
+  background: #11131a;
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.chart-seg button {
+  cursor: pointer;
+  padding: 7px 14px;
+  background: transparent;
+  color: #6a7288;
+  border: none;
+  font-weight: 600;
+  font-size: 13px;
+}
+.chart-seg button.on {
+  background: #6c63ff;
+  color: #fff;
+}
+
+.chart-area {
+  position: relative;
+}
+.chart-box {
+  width: 100%;
+  height: 420px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.chart-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 19, 26, 0.75);
+  color: #aab2c5;
+  border-radius: 10px;
+}
+.chart-error {
+  color: #ef4444;
+  text-align: center;
+  padding: 80px 0;
+}
+
+.chart-note {
+  color: #6a7288;
+  font-size: 12px;
+  margin: 12px 0 0;
+}
+
+.chart-btn {
+  cursor: pointer;
+  padding: 8px 14px;
+  background: transparent;
+  color: #6c63ff;
+  border: 1px solid #6c63ff;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.chart-btn:hover {
+  background: rgba(108, 99, 255, 0.12);
+}
