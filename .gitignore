@@ -1,0 +1,7 @@
+node_modules/
+backend/node_modules/
+stock_search/node_modules/
+.env
+.env.*
+!.env.example
+backend/.env

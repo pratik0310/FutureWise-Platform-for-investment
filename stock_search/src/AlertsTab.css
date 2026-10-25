@@ -1,0 +1,221 @@
+.al-wrap {
+  max-width: 760px;
+  margin: 24px auto;
+  padding: 0 16px;
+  color: #e8edf5;
+}
+
+.al-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 18px;
+}
+.al-header h1 {
+  margin: 0;
+  font-size: 26px;
+}
+.al-header p {
+  margin: 4px 0 0;
+  color: #6a7288;
+  font-size: 14px;
+}
+.al-header span {
+  color: #6a7288;
+  font-size: 13px;
+}
+
+.al-card {
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 20px;
+}
+.al-card h4 {
+  margin: 0 0 12px;
+}
+
+.al-quick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #6a7288;
+}
+.al-quick button {
+  cursor: pointer;
+  padding: 4px 10px;
+  background: transparent;
+  color: #6c63ff;
+  border: 1px solid #6c63ff;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.al-search {
+  position: relative;
+}
+.al-card input,
+.al-card select {
+  box-sizing: border-box;
+  padding: 10px 12px;
+  background: #11131a;
+  color: #e8edf5;
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+.al-card input:focus,
+.al-card select:focus {
+  border-color: #6c63ff;
+}
+.al-search input {
+  width: 100%;
+}
+
+.al-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #11131a;
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  overflow: hidden;
+  z-index: 5;
+}
+.al-results div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.al-results div:hover {
+  background: rgba(108, 99, 255, 0.15);
+}
+.al-results small {
+  color: #6a7288;
+}
+
+.al-live {
+  margin-top: 10px;
+  color: #aab2c5;
+  font-size: 14px;
+}
+
+.al-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.al-row select {
+  min-width: 140px;
+}
+.al-row input {
+  flex: 1;
+  min-width: 130px;
+}
+
+.al-btn {
+  cursor: pointer;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+.al-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.al-btn.primary {
+  background: #6c63ff;
+  color: #fff;
+}
+.al-btn.danger {
+  background: transparent;
+  color: #ef4444;
+  border-color: #ef4444;
+}
+
+.al-error {
+  margin-top: 12px;
+  padding: 9px 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.al-err {
+  color: #ef4444;
+}
+.al-note {
+  color: #6a7288;
+  font-size: 12px;
+  margin: 12px 0 0;
+}
+.al-muted {
+  color: #6a7288;
+}
+
+.al-sub {
+  margin: 20px 0 10px;
+  font-size: 15px;
+  color: #aab2c5;
+}
+.al-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.al-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.al-item.done {
+  opacity: 0.75;
+}
+.al-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.al-item-main > strong {
+  font-size: 16px;
+}
+.al-dir {
+  font-weight: 700;
+  font-size: 13px;
+}
+.al-dir.above {
+  color: #10b981;
+}
+.al-dir.below {
+  color: #ef4444;
+}
+
+.al-empty {
+  text-align: center;
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 12px;
+  padding: 36px 20px;
+}
+.al-empty p {
+  color: #6a7288;
+}
