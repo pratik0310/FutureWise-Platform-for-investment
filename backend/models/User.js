@@ -19,29 +19,34 @@ const userSchema = new mongoose.Schema({
     lowercase: true,
     trim: true,
   },
-  // NEW: only set for email/password accounts. Not loaded unless you ask
+  // Only set for email/password accounts. Not loaded unless you ask
   // for it with .select('+password'), and never sent to the frontend.
   password: { type: String, select: false },
   displayName: String,
   photo: String,
+
+  // NEW: WhatsApp notifications. Digits only, with country code, no "+".
+  phone: { type: String, trim: true, default: '' },
+  whatsappOptIn: { type: Boolean, default: false },
+
   portfolio: { type: [holdingSchema], default: [] },
   lastAnalysis: { type: mongoose.Schema.Types.Mixed, default: null },
   lastAnalysisAt: Date,
   createdAt: { type: Date, default: Date.now },
 });
 
-// NEW: hash the password whenever it is set or changed.
+// Hash the password whenever it is set or changed.
 userSchema.pre('save', async function () {
   if (!this.isModified('password') || !this.password) return;
   this.password = await bcrypt.hash(this.password, 12);
 });
 
-// NEW: compare a typed password with the stored hash.
+// Compare a typed password with the stored hash.
 userSchema.methods.comparePassword = function (plain) {
   return bcrypt.compare(plain, this.password);
 };
 
-// NEW: never include the password hash when a user is sent as JSON.
+// Never include the password hash when a user is sent as JSON.
 userSchema.set('toJSON', {
   transform: (doc, ret) => {
     delete ret.password;

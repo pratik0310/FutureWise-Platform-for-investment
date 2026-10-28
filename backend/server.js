@@ -9,11 +9,13 @@ import cors from 'cors';
 
 // Custom modules (passport.js registers local + google strategies)
 import './config/passport.js';
+import { startWhatsApp } from './config/whatsapp.js';
 import authRoutes from './routes/auth.js';
 import analyzeRoutes from './routes/analyze.js';
 import chartRoutes from './routes/chart.js';
 import alertRoutes, { startAlertScheduler } from './routes/alerts.js';
 import quoteRoutes from './routes/quotes.js';
+import whatsappRoutes from './routes/whatsapp.js';
 
 // ---------------------------------------------------------------
 // Fail fast if required env vars missing
@@ -90,6 +92,7 @@ app.use('/api', analyzeRoutes);
 app.use('/api', chartRoutes);
 app.use('/api', alertRoutes);
 app.use('/api', quoteRoutes);
+app.use('/api', whatsappRoutes);
 
 // 404
 app.use((req, res) => {
@@ -109,5 +112,9 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
+
+  // WhatsApp must never crash the server. If it fails, email still works.
+  startWhatsApp().catch((e) => console.error('WhatsApp start failed:', e.message));
+
   startAlertScheduler();
 });

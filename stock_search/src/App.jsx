@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import stocks from "./data/stocks.json";
 import AuthModal from "./AuthModal";
 import HistoryTab from "./HistoryTab";
@@ -8,28 +8,27 @@ import TrustMeter, { OverallTrust } from "./TrustMeter";
 import { getSentiment } from "./sentiment";
 import "./App.css";
 import "./PortfolioValue.css";
+import LandingPage from "./LandingPage";
+import Logo from "./Logo";
 
 const API = "http://localhost:3000";
 
+// ---- chart palette (leads with orange to match the brand CTA) ----
 const CHART_COLORS = [
-  "#6c63ff", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
+  "#E8751A", "#6c63ff", "#10b981", "#f59e0b", "#8b5cf6",
   "#06b6d4", "#f472b6", "#34d399", "#fbbf24", "#60a5fa",
 ];
 
-// ---- price formatting helpers ----
+// ---- formatting helpers ----
 const curSymbol = (cur) => (cur === "INR" ? "₹" : cur === "USD" ? "$" : "");
-
 const fmtMoney = (v, cur) =>
   v == null || Number.isNaN(v)
     ? "—"
     : curSymbol(cur) +
-      Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
+    Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtPct = (v) => (v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`);
-
-const changeColor = (v) => (v == null || v === 0 ? "#6a7288" : v > 0 ? "#10b981" : "#ef4444");
-
-// short number for the donut centre: 1.2L, 3.4Cr, 12.5K
+const changeColor = (v) =>
+  v == null || v === 0 ? "var(--lp-muted)" : v > 0 ? "var(--lp-up)" : "var(--lp-down)";
 const compactNum = (n) => {
   const v = Number(n);
   if (!Number.isFinite(v)) return String(n);
@@ -40,104 +39,195 @@ const compactNum = (n) => {
 };
 const identity = (n) => n;
 
-// PIE CHART COMPONENT (Canvas-based). Defined OUTSIDE App so it does not remount on every render.
-const PieChart = ({ data, size = 250, fmt = identity, centerLabel = "Total" }) => {
+// ---- inline icons ----
+const SearchIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+  </svg>
+);
+const PlusIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" {...p}>
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+const ChartIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M3 3v18h18" /><path d="m7 14 4-4 4 4 5-5" />
+  </svg>
+);
+const TrashIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+  </svg>
+);
+const RefreshIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" />
+    <path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" />
+  </svg>
+);
+const SparklesIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M12 3 9.5 8.5 4 11l5.5 2.5L12 19l2.5-5.5L20 11l-5.5-2.5L12 3z" />
+  </svg>
+);
+const TrendUpIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="m22 7-8.5 8.5-5-5L2 17" /><path d="M16 7h6v6" />
+  </svg>
+);
+const TrendDownIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="m22 17-8.5-8.5-5 5L2 7" /><path d="M16 17h6v-6" />
+  </svg>
+);
+const SunIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" {...p}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+  </svg>
+);
+const MoonIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+  </svg>
+);
+
+// ---- Animated number ----
+function AnimatedNumber({ value, format }) {
+  const [display, setDisplay] = useState(0);
+  const fromRef = useRef(0);
+  useEffect(() => {
+    const from = fromRef.current;
+    const to = Number(value) || 0;
+    if (from === to) { setDisplay(to); return; }
+    const start = performance.now();
+    const duration = 650;
+    let raf;
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(from + (to - from) * eased);
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = to;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <>{format ? format(display) : Math.round(display)}</>;
+}
+
+// ---- Pie chart ----
+const PieChart = ({
+  data, size = 250, fmt = identity, centerLabel = "Total",
+  bgColor = "#1a1d27", textColor = "#e8edf5", mutedColor = "#9aa3b8",
+}) => {
   const canvasRef = useRef(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !data || data.length === 0) return;
-
     const ctx = canvas.getContext("2d");
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const radius = Math.min(centerX, centerY) - 10;
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const radius = Math.min(cx, cy) - 8;
+    const total = data.reduce((s, i) => s + i.value, 0);
 
-    const total = data.reduce((sum, item) => sum + item.value, 0);
+    let raf;
+    const start = performance.now();
+    const duration = 900;
 
-    if (total === 0) {
+    const draw = (now) => {
+      const p = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "#5a6278";
-      ctx.font = "16px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("No data", centerX, centerY + 6);
-      return;
-    }
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    let startAngle = -Math.PI / 2;
-
-    data.forEach((item, index) => {
-      const sliceAngle = (item.value / total) * 2 * Math.PI;
-      const color = CHART_COLORS[index % CHART_COLORS.length];
-
-      ctx.beginPath();
-      ctx.moveTo(centerX, centerY);
-      ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
-      ctx.closePath();
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.strokeStyle = "#1a1d27";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      if (sliceAngle > 0.1) {
-        const midAngle = startAngle + sliceAngle / 2;
-        const labelRadius = radius * 0.65;
-        const labelX = centerX + Math.cos(midAngle) * labelRadius;
-        const labelY = centerY + Math.sin(midAngle) * labelRadius;
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 11px sans-serif";
+      if (total === 0) {
+        ctx.fillStyle = mutedColor;
+        ctx.font = "600 14px system-ui, sans-serif";
         ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-
-        const percentage = ((item.value / total) * 100).toFixed(1);
-        const label = `${item.label} (${percentage}%)`;
-
-        ctx.shadowColor = "rgba(0,0,0,0.5)";
-        ctx.shadowBlur = 4;
-        ctx.fillText(label, labelX, labelY);
-        ctx.shadowBlur = 0;
+        ctx.fillText("No data", cx, cy);
+        return;
       }
-      startAngle += sliceAngle;
-    });
 
-    // Donut hole
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius * 0.35, 0, 2 * Math.PI);
-    ctx.fillStyle = "#1a1d27";
-    ctx.fill();
-    ctx.strokeStyle = "#2a2d3a";
-    ctx.lineWidth = 1;
-    ctx.stroke();
+      const revealEnd = -Math.PI / 2 + 2 * Math.PI * eased;
+      let cum = -Math.PI / 2;
 
-    ctx.fillStyle = "#e8edf5";
-    ctx.font = "bold 18px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(fmt(total), centerX, centerY - 4);
-    ctx.fillStyle = "#6a7288";
-    ctx.font = "10px sans-serif";
-    ctx.fillText(centerLabel, centerX, centerY + 14);
-  }, [data, size, fmt, centerLabel]);
+      data.forEach((item, i) => {
+        const slice = (item.value / total) * 2 * Math.PI;
+        const sliceEnd = cum + slice;
+        const drawEnd = Math.min(sliceEnd, revealEnd);
+        if (drawEnd > cum) {
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.arc(cx, cy, radius, cum, drawEnd);
+          ctx.closePath();
+          ctx.fillStyle = CHART_COLORS[i % CHART_COLORS.length];
+          ctx.fill();
+          ctx.strokeStyle = bgColor;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        cum = sliceEnd;
+      });
 
-  const total = data.reduce((sum, i) => sum + i.value, 0);
+      if (eased > 0.92) {
+        let lc = -Math.PI / 2;
+        data.forEach((item) => {
+          const slice = (item.value / total) * 2 * Math.PI;
+          const mid = lc + slice / 2;
+          lc += slice;
+          if (slice > 0.16) {
+            const r = radius * 0.68;
+            const x = cx + Math.cos(mid) * r;
+            const y = cy + Math.sin(mid) * r;
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "600 11px system-ui, sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.shadowColor = "rgba(0,0,0,.55)";
+            ctx.shadowBlur = 4;
+            ctx.fillText(`${item.label} ${((item.value / total) * 100).toFixed(0)}%`, x, y);
+            ctx.shadowBlur = 0;
+          }
+        });
+      }
 
+      // donut hole
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 0.4, 0, 2 * Math.PI);
+      ctx.fillStyle = bgColor;
+      ctx.fill();
+
+      ctx.fillStyle = textColor;
+      ctx.font = "700 18px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(fmt(total), cx, cy - 3);
+
+      ctx.fillStyle = mutedColor;
+      ctx.font = "500 10px system-ui, sans-serif";
+      ctx.fillText(centerLabel, cx, cy + 15);
+
+      if (p < 1) raf = requestAnimationFrame(draw);
+    };
+
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [data, size, fmt, centerLabel, bgColor, textColor, mutedColor]);
+
+  const total = data.reduce((s, i) => s + i.value, 0);
   return (
     <div className="pie-chart-container">
       <canvas ref={canvasRef} width={size} height={size} className="pie-chart-canvas" />
       <div className="pie-legend">
-        {data.map((item, index) => {
-          const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : 0;
+        {data.map((item, i) => {
+          const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : "0.0";
           return (
-            <div className="legend-item" key={index}>
-              <span
-                className="legend-color"
-                style={{ background: CHART_COLORS[index % CHART_COLORS.length] }}
-              />
+            <div className="legend-item" key={i}>
+              <span className="legend-color" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
               <span className="legend-label">{item.label}</span>
-              <span className="legend-value">{fmt(item.value)} ({pct}%)</span>
+              <span className="legend-value">{fmt(item.value)} · {pct}%</span>
             </div>
           );
         })}
@@ -146,6 +236,32 @@ const PieChart = ({ data, size = 250, fmt = identity, centerLabel = "Total" }) =
   );
 };
 
+// ---- AI analysis text parser ----
+const parseAnalysis = (text) => {
+  if (!text) return null;
+  const cleanText = text.replace(/\[INST\][\s\S]*?\[\/INST\]/g, "").trim();
+  const sections = { overall: "", positive: [], concerns: [], impact: "" };
+  let current = "overall";
+  for (const line of cleanText.split("\n").filter((l) => l.trim())) {
+    const lower = line.toLowerCase();
+    if (lower.includes("positive") || lower.includes("green") || lower.includes("upside")) {
+      current = "positive"; continue;
+    } else if (lower.includes("concern") || lower.includes("red") || lower.includes("risk") || lower.includes("flag")) {
+      current = "concerns"; continue;
+    } else if (lower.includes("impact") || lower.includes("verdict") || lower.includes("overall")) {
+      current = "impact"; continue;
+    }
+    const c = line.replace(/^\d\.\s*/, "").trim();
+    if (!c) continue;
+    if (current === "positive") sections.positive.push(c);
+    else if (current === "concerns") sections.concerns.push(c);
+    else if (current === "impact") sections.impact += (sections.impact ? " " : "") + c;
+    else sections.overall += (sections.overall ? " " : "") + c;
+  }
+  return sections;
+};
+
+// ============================================================
 function App() {
   const [search, setSearch] = useState("");
   const [selectedStock, setSelectedStock] = useState(null);
@@ -154,35 +270,55 @@ function App() {
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [highlighted, setHighlighted] = useState(0);
 
-  // --- User Authentication State ---
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
-  const [showAuth, setShowAuth] = useState(null); // null | "signin" | "signup"
-  const [tab, setTab] = useState("portfolio"); // "portfolio" | "history"
-  const [chartFor, setChartFor] = useState(null); // stock to show chart for
+  const [showAuth, setShowAuth] = useState(null);
+  const [tab, setTab] = useState("portfolio");
+  const [chartFor, setChartFor] = useState(null);
+  const [entered, setEntered] = useState(false);
 
-  // --- live prices ---
-  const [quotes, setQuotes] = useState({}); // "SYMBOL|EXCHANGE" -> { price, change, changePct, prevClose, currency }
+  const [quotes, setQuotes] = useState({});
   const [quotesAt, setQuotesAt] = useState(null);
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [quotesError, setQuotesError] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [flash, setFlash] = useState(false);
 
-  // true only after saved portfolio is loaded from DB (blocks early autosave that would wipe DB)
   const portfolioHydrated = useRef(false);
 
-  // Check login on page load + restore saved portfolio and last analysis
+  // theme — same localStorage key as LandingPage so it persists across views
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem("lp-theme") || "dark"; } catch { return "dark"; }
+  });
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    try { localStorage.setItem("lp-theme", next); } catch { /* ignore */ }
+  };
+
+  // allow the app shell to use the full width (same trick as LandingPage)
+  useEffect(() => {
+    document.documentElement.classList.add("app-active");
+    return () => document.documentElement.classList.remove("app-active");
+  }, []);
+
+  // toasts
+  const [toasts, setToasts] = useState([]);
+  const showToast = useCallback((message, type = "info") => {
+    const id = String(Date.now() + Math.random());
+    setToasts((t) => [...t, { id, message, type }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000);
+  }, []);
+
+  // restore auth
   useEffect(() => {
     fetch(`${API}/auth/me`, { credentials: "include" })
-      .then((res) => {
-        if (res.ok) return res.json();
-        throw new Error("Not logged in");
-      })
+      .then((res) => { if (res.ok) return res.json(); throw new Error(); })
       .then((data) => {
         setUser(data.user);
         setPortfolio(data.user.portfolio || []);
-        // backend stores full response {success, results}; UI needs the results array
         setAnalysis(data.user.lastAnalysis?.results || null);
         portfolioHydrated.current = true;
       })
@@ -190,11 +326,10 @@ function App() {
       .finally(() => setCheckingAuth(false));
   }, []);
 
-  // Autosave portfolio to DB (debounced). Only when logged in and after hydrate.
+  // autosave
   useEffect(() => {
     if (!user || !portfolioHydrated.current) return;
-
-    const timer = setTimeout(() => {
+    const t = setTimeout(() => {
       fetch(`${API}/api/portfolio`, {
         method: "PUT",
         credentials: "include",
@@ -202,30 +337,22 @@ function App() {
         body: JSON.stringify({ portfolio }),
       }).catch((e) => console.error("Autosave failed:", e));
     }, 800);
-
-    return () => clearTimeout(timer);
+    return () => clearTimeout(t);
   }, [portfolio, user]);
 
-  // Debug: Check stocks
-  useEffect(() => {
-    console.log("📊 Total stocks loaded:", stocks?.length || 0);
-    const nseCount = stocks?.filter((s) => s.exchange === "NSE").length || 0;
-    const usCount = stocks?.filter((s) => s.exchange === "US").length || 0;
-    console.log(`   🇮🇳 NSE: ${nseCount}, 🇺🇸 US: ${usCount}`);
-  }, []);
+  // search
+  const results = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    return stocks
+      .filter((s) =>
+        String(s.name || "").toLowerCase().includes(q) ||
+        String(s.symbol || "").toLowerCase().includes(q)
+      )
+      .slice(0, 12);
+  }, [search]);
 
-  // Search results
-  const results =
-    search.trim() === ""
-      ? []
-      : stocks
-          .filter((stock) => {
-            const query = search.toLowerCase();
-            const name = String(stock.name || "").toLowerCase();
-            const symbol = String(stock.symbol || "").toLowerCase();
-            return name.includes(query) || symbol.includes(query);
-          })
-          .slice(0, 15);
+  useEffect(() => { setHighlighted(0); }, [search]);
 
   const selectStock = (stock) => {
     setSelectedStock(stock);
@@ -234,70 +361,42 @@ function App() {
   };
 
   const addToPortfolio = () => {
-    if (!selectedStock) {
-      alert("Please select a stock.");
-      return;
-    }
-
+    if (!selectedStock) return showToast("Pick a stock first.", "warn");
     const qty = Number(quantity);
-
-    if (!qty || qty <= 0) {
-      alert("Please enter a valid quantity.");
-      return;
-    }
-
-    const existingStock = portfolio.find(
-      (item) => item.symbol === selectedStock.symbol
-    );
-
-    if (existingStock) {
-      setPortfolio(
-        portfolio.map((item) =>
-          item.symbol === selectedStock.symbol
-            ? { ...item, quantity: item.quantity + qty }
-            : item
-        )
-      );
+    if (!qty || qty <= 0) return showToast("Enter a valid quantity.", "warn");
+    const existing = portfolio.find((i) => i.symbol === selectedStock.symbol);
+    if (existing) {
+      setPortfolio(portfolio.map((i) =>
+        i.symbol === selectedStock.symbol ? { ...i, quantity: i.quantity + qty } : i
+      ));
+      showToast(`${qty} more ${selectedStock.symbol} added.`, "success");
     } else {
-      setPortfolio([
-        ...portfolio,
-        {
-          symbol: selectedStock.symbol,
-          name: selectedStock.name,
-          exchange: selectedStock.exchange || "NSE",
-          quantity: qty,
-        },
-      ]);
+      setPortfolio([...portfolio, {
+        symbol: selectedStock.symbol,
+        name: selectedStock.name,
+        exchange: selectedStock.exchange || "NSE",
+        quantity: qty,
+      }]);
+      showToast(`${selectedStock.symbol} added to portfolio.`, "success");
     }
-
-    setQuantity("");
-    setSearch("");
-    setSelectedStock(null);
-    setShowResults(false);
+    setQuantity(""); setSearch(""); setSelectedStock(null); setShowResults(false);
   };
 
   const removeStock = (symbol) => {
-    setPortfolio(portfolio.filter((stock) => stock.symbol !== symbol));
+    setPortfolio(portfolio.filter((s) => s.symbol !== symbol));
+    showToast(`${symbol} removed.`, "info");
   };
 
-  const totalQuantity = portfolio.reduce(
-    (total, stock) => total + stock.quantity,
-    0
+  // quotes
+  const qKey = (s) => `${s.symbol}|${s.exchange || "NSE"}`;
+  const portfolioKey = useMemo(
+    () => portfolio.map((s) => `${s.symbol}|${s.exchange || "NSE"}`).join(","),
+    [portfolio]
   );
 
-  // ---- live prices: load now, then every 60s while the tab is visible ----
-  const qKey = (s) => `${s.symbol}|${s.exchange || "NSE"}`;
-  const portfolioKey = portfolio.map(qKey).join(",");
-
   useEffect(() => {
-    if (portfolio.length === 0) {
-      setQuotes({});
-      setQuotesAt(null);
-      return;
-    }
-
+    if (portfolio.length === 0) { setQuotes({}); setQuotesAt(null); return; }
     let cancelled = false;
-
     const load = async () => {
       if (document.hidden) return;
       setQuotesLoading(true);
@@ -309,639 +408,621 @@ function App() {
             stocks: portfolio.map((s) => ({ symbol: s.symbol, exchange: s.exchange || "NSE" })),
           }),
         });
-        if (!r.ok) throw new Error("quotes failed");
+        if (!r.ok) throw new Error();
         const d = await r.json();
         if (!cancelled) {
           setQuotes(d.quotes || {});
           setQuotesAt(d.at || new Date().toISOString());
           setQuotesError(false);
         }
-      } catch {
-        if (!cancelled) setQuotesError(true);
-      } finally {
-        if (!cancelled) setQuotesLoading(false);
-      }
+      } catch { if (!cancelled) setQuotesError(true); }
+      finally { if (!cancelled) setQuotesLoading(false); }
     };
-
     load();
     const id = setInterval(load, 60000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
+    return () => { cancelled = true; clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioKey, refreshTick]);
 
-  // per-holding price/value, plus totals per currency (never mixes INR and USD)
-  const holdings = portfolio.map((stock) => {
-    const q = quotes[qKey(stock)] || null;
-    return {
-      stock,
-      q,
-      value: q ? q.price * stock.quantity : null,
-    };
-  });
+  useEffect(() => {
+    if (!quotesAt) return;
+    setFlash(true);
+    const t = setTimeout(() => setFlash(false), 700);
+    return () => clearTimeout(t);
+  }, [quotesAt]);
 
-  const totals = {};
-  holdings.forEach(({ stock, q, value }) => {
-    if (!q) return;
-    const cur = q.currency || "INR";
-    if (!totals[cur]) totals[cur] = { value: 0, day: 0, prev: 0 };
-    totals[cur].value += value;
-    const chg = q.change ?? 0;
-    totals[cur].day += chg * stock.quantity;
-    totals[cur].prev += (q.prevClose ?? q.price - chg) * stock.quantity;
-  });
+  // derived data
+  const holdings = useMemo(
+    () => portfolio.map((stock) => {
+      const q = quotes[qKey(stock)] || null;
+      return { stock, q, value: q ? q.price * stock.quantity : null };
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [portfolio, quotes]
+  );
+
+  const totals = useMemo(() => {
+    const out = {};
+    holdings.forEach(({ stock, q, value }) => {
+      if (!q) return;
+      const cur = q.currency || "INR";
+      if (!out[cur]) out[cur] = { value: 0, day: 0, prev: 0 };
+      out[cur].value += value;
+      const chg = q.change ?? 0;
+      out[cur].day += chg * stock.quantity;
+      out[cur].prev += (q.prevClose ?? q.price - chg) * stock.quantity;
+    });
+    return out;
+  }, [holdings]);
+
   const curList = Object.keys(totals);
   const missingPrices = holdings.filter((h) => !h.q).length;
   const pieByValue = holdings.length > 0 && missingPrices === 0 && curList.length === 1;
   const pieCur = curList[0];
 
-  // Call our Node backend, not ngrok directly
+  const totalQuantity = useMemo(
+    () => portfolio.reduce((t, s) => t + s.quantity, 0),
+    [portfolio]
+  );
+
+  const pieData = useMemo(
+    () => holdings.map(({ stock, value }) => ({
+      label: stock.symbol,
+      value: pieByValue ? value : stock.quantity,
+    })),
+    [holdings, pieByValue]
+  );
+
+  const pieFmt = useMemo(
+    () => (pieByValue ? (n) => curSymbol(pieCur) + compactNum(n) : identity),
+    [pieByValue, pieCur]
+  );
+
+  // analyze
   const analyzePortfolio = async () => {
-    if (portfolio.length === 0) {
-      alert("Add at least one stock to your portfolio.");
-      return;
-    }
-
-    if (!user) {
-      setShowAuth("signin");
-      return;
-    }
-
-    setLoading(true);
-    setAnalysis(null);
-
+    if (portfolio.length === 0) return showToast("Add at least one stock.", "warn");
+    if (!user) { setShowAuth("signin"); return; }
+    setLoading(true); setAnalysis(null);
     try {
-      const response = await fetch(`${API}/api/analyze`, {
+      const res = await fetch(`${API}/api/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ portfolio }),
       });
-
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      console.log("FinGPT API response via backend:");
-      console.log(data);
-
-      if (!data.success) {
-        throw new Error(data.error || "Portfolio analysis failed.");
-      }
-
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Analysis failed.");
       setAnalysis(data.results);
-    } catch (error) {
-      console.error("Portfolio analysis error:", error);
-      alert(error.message || "Could not connect to the server.");
-    } finally {
-      setLoading(false);
-    }
+      showToast("Analysis complete.", "success");
+    } catch (e) {
+      console.error(e);
+      showToast(e.message || "Could not connect to the server.", "error");
+    } finally { setLoading(false); }
   };
 
-  // --- Auth Handlers ---
+  // auth
   const handleAuthSuccess = (u) => {
     setUser(u);
     setPortfolio(u.portfolio || []);
     setAnalysis(u.lastAnalysis?.results || null);
     portfolioHydrated.current = true;
     setShowAuth(null);
+    showToast(`Welcome, ${u.displayName || "there"}!`, "success");
   };
 
   const handleLogout = async () => {
-    try {
-      await fetch(`${API}/auth/logout`, {
-        method: "POST",
-        credentials: "include",
-      });
-    } catch (e) {
-      console.error("Logout failed:", e);
-    }
-    setUser(null);
-    setPortfolio([]);
-    setAnalysis(null);
+    try { await fetch(`${API}/auth/logout`, { method: "POST", credentials: "include" }); } catch { /* ignore */ }
+    setUser(null); setPortfolio([]); setAnalysis(null);
     portfolioHydrated.current = false;
-    setTab("portfolio");
+    setTab("portfolio"); setEntered(false);
+    showToast("Signed out.", "info");
   };
 
-  // "View" on a history item: show that old analysis on the Portfolio tab
   const viewFromHistory = (results) => {
-    setAnalysis(results);
-    setTab("portfolio");
+    setAnalysis(results); setTab("portfolio");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // donut shows share of money once every stock has a price; before that, share of quantity
-  const pieData = holdings.map(({ stock, value }) => ({
-    label: stock.symbol,
-    value: pieByValue ? value : stock.quantity,
-  }));
-  const pieFmt = pieByValue ? (n) => curSymbol(pieCur) + compactNum(n) : identity;
+  const exchangeTone = (ex) => (ex === "US" ? "us" : "nse");
 
-  const parseAnalysis = (text) => {
-    if (!text) return null;
-    let cleanText = text.replace(/\[INST\][\s\S]*?\[\/INST\]/g, "").trim();
-    const sections = { overall: "", positive: [], concerns: [], impact: "" };
-    const lines = cleanText.split("\n").filter((line) => line.trim());
-    let currentSection = "overall";
-    for (const line of lines) {
-      const lower = line.toLowerCase();
-      if (lower.includes("positive") || lower.includes("green") || lower.includes("upside")) {
-        currentSection = "positive";
-        continue;
-      } else if (lower.includes("concern") || lower.includes("red") || lower.includes("risk") || lower.includes("flag")) {
-        currentSection = "concerns";
-        continue;
-      } else if (lower.includes("impact") || lower.includes("verdict") || lower.includes("overall")) {
-        currentSection = "impact";
-        continue;
-      }
-      const cleanLine = line.replace(/^\d\.\s*/, "").trim();
-      if (cleanLine) {
-        if (currentSection === "positive") sections.positive.push(cleanLine);
-        else if (currentSection === "concerns") sections.concerns.push(cleanLine);
-        else if (currentSection === "impact")
-          sections.impact += (sections.impact ? " " : "") + cleanLine;
-        else sections.overall += (sections.overall ? " " : "") + cleanLine;
-      }
-    }
-    return sections;
-  };
-
-
-  const getExchangeColor = (exchange) => {
-    if (exchange === "NSE") return "#6c63ff";
-    if (exchange === "US") return "#10b981";
-    return "#6c63ff";
-  };
-
-  // Don't render the app until we know if the user is logged in
-  if (checkingAuth)
+  // ---- guards ----
+  if (checkingAuth) {
     return (
-      <div style={{ color: "white", textAlign: "center", marginTop: "50px" }}>
-        Loading...
+      <div className="app-lp" data-theme={theme}>
+        <div className="app-boot">
+          <div className="app-boot-spinner" />
+          <p>Loading…</p>
+        </div>
       </div>
     );
+  }
+
+  if (!user && !entered) {
+    return (
+      <LandingPage
+        onSignIn={() => { setEntered(true); setShowAuth("signin"); }}
+        onSignUp={() => { setEntered(true); setShowAuth("signup"); }}
+        onStart={() => setEntered(true)}
+      />
+    );
+  }
 
   return (
-    <div className="app">
-      {/* Authentication Header */}
-      <div
-        className="header"
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          padding: "15px 30px",
-          background: "#1a1d27",
-          borderBottom: "1px solid #2a2d3a",
-        }}
-      >
-        {user ? (
-          <div style={{ display: "flex", alignItems: "center", gap: "15px", color: "white" }}>
-            {user.photo && (
-              <img src={user.photo} alt="Profile" style={{ width: "35px", borderRadius: "50%" }} />
-            )}
-            <span style={{ fontWeight: "bold" }}>{user.displayName}</span>
-            <button
-              onClick={handleLogout}
-              style={{
-                cursor: "pointer",
-                padding: "6px 12px",
-                borderRadius: "5px",
-                background: "transparent",
-                color: "#ef4444",
-                border: "1px solid #ef4444",
-              }}
-            >
-              Logout
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button
-              onClick={() => setShowAuth("signin")}
-              style={{
-                cursor: "pointer",
-                padding: "8px 16px",
-                background: "transparent",
-                color: "white",
-                border: "1px solid #2a2d3a",
-                borderRadius: "5px",
-                fontWeight: "bold",
-              }}
-            >
-              Sign in
-            </button>
-            <button
-              onClick={() => setShowAuth("signup")}
-              style={{
-                cursor: "pointer",
-                padding: "8px 16px",
-                background: "#6c63ff",
-                color: "white",
-                border: "none",
-                borderRadius: "5px",
-                fontWeight: "bold",
-              }}
-            >
-              Sign up
-            </button>
-          </div>
-        )}
-      </div>
+    <div className="app-lp" data-theme={theme}>
+      {/* ============ NAV ============ */}
+      <header className="app-nav">
+        <div className="app-in app-nav-in">
+          {/* Logo */}
+          <Logo />
 
-      {/* Tabs */}
-      <div className="tab-bar">
-        <button
-          className={`tab-btn ${tab === "portfolio" ? "active" : ""}`}
-          onClick={() => setTab("portfolio")}
-        >
-          Portfolio
-        </button>
-        <button
-          className={`tab-btn ${tab === "history" ? "active" : ""}`}
-          onClick={() => setTab("history")}
-        >
-          History
-        </button>
-        <button
-          className={`tab-btn ${tab === "alerts" ? "active" : ""}`}
-          onClick={() => setTab("alerts")}
-        >
-          Alerts
-        </button>
-      </div>
-
-      {tab === "portfolio" && (
-      <>
-      {/* Search Section */}
-      <div className="search-container">
-        <div className="search-box">
-          <span className="search-label">Search Stocks</span>
-          <input
-            type="text"
-            placeholder="Type company name or symbol..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setSelectedStock(null);
-              setShowResults(true);
-            }}
-            onFocus={() => setShowResults(true)}
-            onBlur={() => setTimeout(() => setShowResults(false), 200)}
-          />
-        </div>
-
-        {showResults && search && results.length > 0 && (
-          <div className="results">
-            {results.map((stock) => (
-              <div
-                className="stock-item"
-                key={stock.symbol}
-                onClick={() => selectStock(stock)}
+          {/* Tabs */}
+          <nav className="app-tabs" aria-label="Main sections">
+            {[
+              {
+                id: "portfolio", label: "Portfolio", icon: (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" /></svg>
+                )
+              },
+              {
+                id: "history", label: "History", icon: (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                )
+              },
+              {
+                id: "alerts", label: "Alerts", icon: (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
+                )
+              },
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`app-tab ${tab === t.id ? "is-active" : ""}`}
+                onClick={() => setTab(t.id)}
               >
-                <div className="stock-info">
-                  <div className="stock-name">{stock.name}</div>
-                  <div className="stock-symbol">{stock.symbol}</div>
-                </div>
-                <span
-                  className="exchange"
-                  style={{
-                    background: getExchangeColor(stock.exchange),
-                    color: "#fff",
-                    padding: "2px 8px",
-                    borderRadius: "12px",
-                    fontSize: "11px",
-                    fontWeight: "bold",
-                  }}
-                >
-                  {stock.exchange || "NSE"}
-                </span>
-              </div>
+                <span className="app-tab-icon">{t.icon}</span>
+                {t.label}
+              </button>
             ))}
-          </div>
-        )}
+          </nav>
 
-        {showResults && search && results.length === 0 && (
-          <div className="no-results">
-            <span className="no-results-query">"{search}"</span>
-            <span> did not match any stocks.</span>
-            <span className="no-results-hint">Try a different company name or symbol.</span>
-          </div>
-        )}
-      </div>
-
-      {/* Selected Stock */}
-      {selectedStock && (
-        <div className="selected-stock">
-          <div className="selected-stock-left">
-            <h2>{selectedStock.name}</h2>
-            <div className="stock-details">
-              <p>Symbol: <strong>{selectedStock.symbol}</strong></p>
-              <p>Exchange: <strong>{selectedStock.exchange || "NSE"}</strong></p>
-            </div>
-          </div>
-          <div className="quantity-section">
-            <input
-              type="number"
-              min="1"
-              placeholder="Quantity"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-            />
-            <button onClick={addToPortfolio}>Add to Portfolio</button>
-            <button className="chart-btn" onClick={() => setChartFor(selectedStock)}>
-              Chart
+          {/* Actions */}
+          <div className="app-nav-actions">
+            <button
+              type="button"
+              className="app-theme"
+              onClick={toggleTheme}
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+            >
+              {theme === "dark" ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" /></svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>
+              )}
             </button>
+
+            {user ? (
+              <div className="app-user">
+                <div className="app-avatar-wrap">
+                  {user.photo ? (
+                    <img src={user.photo} alt="" className="app-avatar-img" />
+                  ) : (
+                    <span className="app-avatar">
+                      {(user.displayName || "?")[0].toUpperCase()}
+                    </span>
+                  )}
+                  <span className="app-avatar-status" />
+                </div>
+                <span className="app-user-name">{user.displayName}</span>
+                <div className="app-user-divider" />
+                <button type="button" className="app-btn app-btn-ghost app-btn-sm app-logout-btn" onClick={handleLogout}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <div className="app-auth-actions">
+                <button type="button" className="app-btn app-btn-ghost app-btn-sm" onClick={() => setShowAuth("signin")}>
+                  Sign in
+                </button>
+                <button type="button" className="app-btn app-btn-solid app-btn-sm" onClick={() => setShowAuth("signup")}>
+                  Sign up
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      )}
+      </header>
 
-      {/* Portfolio Section */}
-      <div className="portfolio">
-        <div className="portfolio-header">
-          <div>
-            <h1>My Portfolio</h1>
-            <p>Manage your stock holdings</p>
-          </div>
-          <span>{portfolio.length} Stocks</span>
-        </div>
+      <main className="app-main" id="top">
+        {tab === "portfolio" && (
+          <div className="app-in">
 
-        {portfolio.length === 0 ? (
-          <div className="empty-portfolio">
-            <h3>Your portfolio is empty</h3>
-            <p>Search for a stock above and add it to your portfolio.</p>
-          </div>
-        ) : (
-          <div className="portfolio-layout">
-            <div className="portfolio-chart">
-              <h4>Portfolio Allocation</h4>
-              <PieChart
-                data={pieData}
-                size={250}
-                fmt={pieFmt}
-                centerLabel={pieByValue ? "Value" : "Total qty"}
-              />
-            </div>
+            {/* ============ SEARCH ============ */}
+            <section className="app-search-section">
+              <h1 className="app-h1">Your Portfolio</h1>
+              <p className="app-sub">Search, track, and understand every holding in one view.</p>
 
-            <div className="portfolio-list-section">
-              {/* Total value, like a brokerage app */}
-              <div className="pv-wrap">
-                {curList.map((cur) => {
-                  const t = totals[cur];
-                  const dayPct = t.prev > 0 ? (t.day / t.prev) * 100 : null;
-                  return (
-                    <div className="pv-card" key={cur}>
-                      <span>Portfolio value{curList.length > 1 ? ` (${cur})` : ""}</span>
-                      <strong className="pv-value">{fmtMoney(t.value, cur)}</strong>
-                      <small style={{ color: changeColor(t.day) }}>
-                        {t.day >= 0 ? "▲" : "▼"} {fmtMoney(Math.abs(t.day), cur)} ({fmtPct(dayPct)}) today
-                      </small>
-                    </div>
-                  );
-                })}
-                {curList.length === 0 && (
-                  <div className="pv-card">
-                    <span>Portfolio value</span>
-                    <strong className="pv-value">{quotesError ? "—" : "Loading..."}</strong>
+              <div className="app-search">
+                <div className="app-search-field">
+                  <SearchIcon width="18" height="18" />
+                  <input
+                    type="text"
+                    placeholder="Search company or symbol…"
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); setSelectedStock(null); setShowResults(true); }}
+                    onFocus={() => setShowResults(true)}
+                    onBlur={() => setTimeout(() => setShowResults(false), 150)}
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowDown") { e.preventDefault(); setHighlighted((i) => Math.min(i + 1, results.length - 1)); }
+                      else if (e.key === "ArrowUp") { e.preventDefault(); setHighlighted((i) => Math.max(i - 1, 0)); }
+                      else if (e.key === "Enter" && results[highlighted]) { selectStock(results[highlighted]); }
+                      else if (e.key === "Escape") setShowResults(false);
+                    }}
+                  />
+                  <span className="app-search-kbd">/</span>
+                </div>
+
+                {showResults && search && (
+                  <div className="app-search-results" onMouseDown={(e) => e.preventDefault()}>
+                    {results.length === 0 ? (
+                      <div className="app-search-empty">
+                        <strong>"{search}"</strong> didn't match any stocks.
+                        <small>Try a different name or symbol.</small>
+                      </div>
+                    ) : (
+                      results.map((s, i) => (
+                        <button
+                          key={s.symbol}
+                          type="button"
+                          className={`app-search-item ${i === highlighted ? "is-hl" : ""}`}
+                          onMouseEnter={() => setHighlighted(i)}
+                          onClick={() => selectStock(s)}
+                        >
+                          <div className="app-search-item-main">
+                            <span className="app-search-item-name">{s.name}</span>
+                            <span className="app-search-item-sub">{s.symbol}</span>
+                          </div>
+                          <span className={`app-exchange app-exchange-${exchangeTone(s.exchange)}`}>
+                            {s.exchange || "NSE"}
+                          </span>
+                        </button>
+                      ))
+                    )}
                   </div>
                 )}
               </div>
-              <div className="pv-meta">
-                {quotesError
-                  ? "Could not load prices."
-                  : quotesAt
-                  ? `Prices updated ${new Date(quotesAt).toLocaleTimeString("en-IN", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}, refresh every 60s. May be delayed.`
-                  : "Loading prices..."}
-                {missingPrices > 0 && curList.length > 0 && ` ${missingPrices} stock(s) have no price yet.`}{" "}
+            </section>
+
+            {/* ============ SELECTED STOCK ============ */}
+            {selectedStock && (
+              <section className="app-selected fade-up">
+                <div className="app-selected-info">
+                  <h2>{selectedStock.name}</h2>
+                  <p>
+                    <strong>{selectedStock.symbol}</strong>
+                    <span className="app-sep">·</span>
+                    {selectedStock.exchange || "NSE"}
+                  </p>
+                </div>
+                <div className="app-selected-actions">
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Quantity"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                  />
+                  <button type="button" className="app-btn app-btn-solid" onClick={addToPortfolio}>
+                    <PlusIcon width="16" height="16" /> Add
+                  </button>
+                  <button type="button" className="app-btn app-btn-ghost" onClick={() => setChartFor(selectedStock)}>
+                    <ChartIcon width="16" height="16" /> Chart
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {/* ============ PORTFOLIO ============ */}
+            <section className="app-panel">
+              <div className="app-panel-head">
+                <div>
+                  <h2>Holdings</h2>
+                  <p>
+                    {portfolio.length} stock{portfolio.length === 1 ? "" : "s"}
+                    {totalQuantity > 0 && ` · ${totalQuantity} total qty`}
+                  </p>
+                </div>
                 <button
                   type="button"
-                  className="pv-refresh"
-                  disabled={quotesLoading}
+                  className={`app-btn app-btn-ghost app-btn-sm ${quotesLoading ? "is-loading" : ""}`}
                   onClick={() => setRefreshTick((n) => n + 1)}
+                  disabled={quotesLoading}
                 >
-                  {quotesLoading ? "Refreshing..." : "Refresh"}
+                  <RefreshIcon width="14" height="14" /> {quotesLoading ? "Refreshing…" : "Refresh"}
                 </button>
               </div>
 
-              <div className="portfolio-summary">
-                <div className="summary-card">
-                  <span>Total Holdings</span>
-                  <strong>{portfolio.length}</strong>
+              {portfolio.length === 0 ? (
+                <div className="app-empty">
+                  <div className="app-empty-icon"><ChartIcon width="40" height="40" /></div>
+                  <h3>No stocks yet</h3>
+                  <p>Search for a stock above to start tracking live prices and AI analysis.</p>
                 </div>
-                <div className="summary-card">
-                  <span>Total Quantity</span>
-                  <strong>{totalQuantity}</strong>
-                </div>
-              </div>
-
-              <div className="portfolio-list">
-                {holdings.map(({ stock, q, value }) => {
-                  // share of money (same currency) when priced, else share of quantity
-                  const curTotal = q ? totals[q.currency || "INR"]?.value : 0;
-                  const allocation =
-                    q && curTotal > 0
-                      ? ((value / curTotal) * 100).toFixed(1)
-                      : totalQuantity > 0
-                      ? ((stock.quantity / totalQuantity) * 100).toFixed(1)
-                      : "0.0";
-                  return (
-                    <div className="portfolio-stock" key={stock.symbol}>
-                      <div className="portfolio-stock-info">
-                        <h3>{stock.symbol}</h3>
-                        <p>{stock.name}</p>
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            color: getExchangeColor(stock.exchange),
-                            fontWeight: "bold",
-                          }}
-                        >
-                          {stock.exchange || "NSE"}
-                        </span>
+              ) : (
+                <>
+                  {/* value cards */}
+                  <div className="app-value-grid">
+                    {curList.length === 0 && !quotesError && (
+                      <>
+                        <div className="app-value-card app-skeleton" />
+                        <div className="app-value-card app-skeleton" />
+                      </>
+                    )}
+                    {curList.length === 0 && quotesError && (
+                      <div className="app-value-card">
+                        <span className="app-value-label">Portfolio value</span>
+                        <strong className="app-value-num">—</strong>
+                        <small className="app-value-delta">Could not load prices</small>
                       </div>
-                      <div className="holding">
-                        <span>Quantity</span>
-                        <strong>{stock.quantity}</strong>
-                      </div>
-                      <div className="holding">
-                        <span>Price</span>
-                        <strong>{q ? fmtMoney(q.price, q.currency) : "—"}</strong>
-                        {q && (
-                          <small style={{ color: changeColor(q.changePct) }}>
-                            {q.change >= 0 ? "▲" : "▼"} {fmtPct(q.changePct)}
+                    )}
+                    {curList.map((cur) => {
+                      const t = totals[cur];
+                      const dayPct = t.prev > 0 ? (t.day / t.prev) * 100 : null;
+                      const up = t.day >= 0;
+                      return (
+                        <div className="app-value-card" key={cur}>
+                          <span className="app-value-label">
+                            Portfolio value {curList.length > 1 ? `(${cur})` : ""}
+                          </span>
+                          <strong className="app-value-num">
+                            <AnimatedNumber value={t.value} format={(n) => fmtMoney(n, cur)} />
+                          </strong>
+                          <small className="app-value-delta" style={{ color: changeColor(t.day) }}>
+                            {up ? <TrendUpIcon width="12" height="12" /> : <TrendDownIcon width="12" height="12" />}
+                            {fmtMoney(Math.abs(t.day), cur)} ({fmtPct(dayPct)}) today
                           </small>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="app-meta">
+                    <span className={`app-live ${quotesLoading ? "is-pulse" : ""}`} />
+                    {quotesError
+                      ? "Could not load prices."
+                      : quotesAt
+                        ? `Updated ${new Date(quotesAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} · auto-refresh every 60s`
+                        : "Loading prices…"}
+                    {missingPrices > 0 && curList.length > 0 && ` · ${missingPrices} pending`}
+                  </div>
+
+                  {/* pie + holdings */}
+                  <div className="app-portfolio-layout">
+                    <div className="app-pie-card">
+                      <h4>Allocation</h4>
+                      <PieChart
+                        data={pieData}
+                        size={240}
+                        fmt={pieFmt}
+                        centerLabel={pieByValue ? "Value" : "Total qty"}
+                        bgColor={theme === "dark" ? "#1a1d27" : "#ffffff"}
+                        textColor={theme === "dark" ? "#e8edf5" : "#14161f"}
+                        mutedColor={theme === "dark" ? "#9aa3b8" : "#566079"}
+                      />
+                    </div>
+
+                    <div className="app-holdings">
+                      {holdings.map(({ stock, q, value }) => {
+                        const curTotal = q ? totals[q.currency || "INR"]?.value : 0;
+                        const alloc = q && curTotal > 0
+                          ? ((value / curTotal) * 100).toFixed(1)
+                          : totalQuantity > 0
+                            ? ((stock.quantity / totalQuantity) * 100).toFixed(1)
+                            : "0.0";
+                        return (
+                          <div className="app-holding" key={stock.symbol}>
+                            <div className="app-holding-id">
+                              <h3>{stock.symbol}</h3>
+                              <p>{stock.name}</p>
+                              <span className={`app-exchange app-exchange-${exchangeTone(stock.exchange)}`}>
+                                {stock.exchange || "NSE"}
+                              </span>
+                            </div>
+                            <div className="app-holding-cell">
+                              <span>Qty</span>
+                              <strong>{stock.quantity}</strong>
+                            </div>
+                            <div className="app-holding-cell">
+                              <span>Price</span>
+                              <strong className={flash && q ? "is-flash" : ""}>
+                                {q ? fmtMoney(q.price, q.currency) : "—"}
+                              </strong>
+                              {q && (
+                                <small style={{ color: changeColor(q.changePct) }}>
+                                  {q.change >= 0 ? "▲" : "▼"} {fmtPct(q.changePct)}
+                                </small>
+                              )}
+                            </div>
+                            <div className="app-holding-cell">
+                              <span>Value</span>
+                              <strong className={flash && q ? "is-flash" : ""}>
+                                {q ? fmtMoney(value, q.currency) : "—"}
+                              </strong>
+                            </div>
+                            <div className="app-holding-cell">
+                              <span>Alloc</span>
+                              <strong>{alloc}%</strong>
+                            </div>
+                            <div className="app-holding-tools">
+                              <button
+                                type="button"
+                                className="app-icon-btn"
+                                onClick={() => setChartFor(stock)}
+                                title="Chart"
+                              >
+                                <ChartIcon width="15" height="15" />
+                              </button>
+                              <button
+                                type="button"
+                                className="app-icon-btn app-icon-danger"
+                                onClick={() => removeStock(stock.symbol)}
+                                title="Remove"
+                              >
+                                <TrashIcon width="15" height="15" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="app-analyze-btn"
+                    onClick={analyzePortfolio}
+                    disabled={loading}
+                  >
+                    <SparklesIcon width="18" height="18" />
+                    {loading ? "Analyzing portfolio…" : "Analyze Portfolio with FinGPT"}
+                  </button>
+                </>
+              )}
+            </section>
+
+            {/* ============ LOADING SKELETON ============ */}
+            {loading && (
+              <section className="app-panel app-skeleton-panel">
+                <div className="app-sk-line w-40" />
+                <div className="app-sk-line w-90" />
+                <div className="app-sk-line w-70" />
+                <div className="app-sk-line w-85" />
+                <div className="app-sk-line w-60" />
+              </section>
+            )}
+
+            {/* ============ ANALYSIS ============ */}
+            {analysis && !loading && (
+              <section className="app-analysis fade-up">
+                <div className="app-analysis-head">
+                  <div>
+                    <h2>Portfolio Analysis</h2>
+                    <p>Recent news and AI-driven insights for your holdings</p>
+                  </div>
+                  <span className="app-pill">FinGPT</span>
+                </div>
+
+                <OverallTrust results={analysis} />
+
+                {analysis.map((stock) => {
+                  const parsed = parseAnalysis(stock.analysis);
+                  const sentiment = getSentiment(stock.analysis);
+                  return (
+                    <article className="app-analysis-stock" key={stock.symbol}>
+                      <header className="app-analysis-stock-head">
+                        <div>
+                          <h3>{stock.symbol}</h3>
+                          <p>{stock.company}</p>
+                        </div>
+                        <div className="app-analysis-badges">
+                          <span className="app-qty-badge">Qty {stock.quantity}</span>
+                          <span
+                            className="app-sentiment-badge"
+                            style={{
+                              background: `${sentiment.color}1f`,
+                              color: sentiment.color,
+                              borderColor: `${sentiment.color}66`,
+                            }}
+                          >
+                            {sentiment.icon} {sentiment.label}
+                          </span>
+                        </div>
+                      </header>
+
+                      <TrustMeter stock={stock} />
+
+                      <div className="app-news-block">
+                        <h4>Recent news</h4>
+                        {stock.news && stock.news.length > 0 ? (
+                          <ul className="app-news-list">
+                            {stock.news.map((n, i) => (
+                              <li key={i}>
+                                <strong>{n.title}</strong>
+                                <small>{n.source} · {n.posted}</small>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="app-muted">No recent news found.</p>
                         )}
                       </div>
-                      <div className="holding">
-                        <span>Value</span>
-                        <strong>{q ? fmtMoney(value, q.currency) : "—"}</strong>
-                      </div>
-                      <div className="allocation">
-                        <span>Allocation</span>
-                        <strong>{allocation}%</strong>
-                      </div>
-                      <button className="chart-btn" onClick={() => setChartFor(stock)}>
-                        Chart
-                      </button>
-                      <button className="remove" onClick={() => removeStock(stock.symbol)}>
-                        Remove
-                      </button>
-                    </div>
+
+                      {parsed && (parsed.positive.length || parsed.concerns.length || parsed.impact) ? (
+                        <div className="app-analysis-sections">
+                          {parsed.positive.length > 0 && (
+                            <div className="app-note app-note-up">
+                              <h4>Positive developments</h4>
+                              <ul>
+                                {parsed.positive.map((t, i) => <li key={i}>{t}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {parsed.concerns.length > 0 && (
+                            <div className="app-note app-note-down">
+                              <h4>Potential concerns</h4>
+                              <ul>
+                                {parsed.concerns.map((t, i) => <li key={i}>{t}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {parsed.impact && (
+                            <div className="app-note app-note-info">
+                              <h4>Overall impact</h4>
+                              <p>{parsed.impact}</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="app-note app-note-info">
+                          <div className="app-analysis-text">
+                            {(stock.analysis || "")
+                              .replace(/\[INST\][\s\S]*?\[\/INST\]/g, "")
+                              .trim()
+                              .split("\n")
+                              .map((l, i) => <p key={i}>{l}</p>)}
+                          </div>
+                        </div>
+                      )}
+                    </article>
                   );
                 })}
-              </div>
-            </div>
+              </section>
+            )}
           </div>
         )}
 
-        {/* Analyze Button */}
-        {portfolio.length > 0 && (
-          <button className="analyze-button" onClick={analyzePortfolio} disabled={loading}>
-            {loading ? "Analyzing Portfolio..." : "Analyze Portfolio"}
-          </button>
-        )}
-
-        {/* Loading Indicator */}
-        {loading && (
-          <div className="loading-indicator">
-            <div className="loading-spinner"></div>
-            <p>Fetching news and analyzing sentiment...</p>
+        {tab === "history" && (
+          <div className="app-in">
+            <HistoryTab
+              user={user}
+              onView={viewFromHistory}
+              onLogin={() => setShowAuth("signin")}
+              onToast={showToast}
+            />
           </div>
         )}
 
-        {/* Analysis Result */}
-        {analysis && (
-          <div className="analysis-card">
-            <div className="analysis-header">
-              <div>
-                <h2>Portfolio Analysis</h2>
-                <p>Recent market news and AI-driven insights</p>
-              </div>
-              <span>FinGPT</span>
-            </div>
-
-            <OverallTrust results={analysis} />
-
-            {analysis.map((stock) => {
-              const parsed = parseAnalysis(stock.analysis);
-              const sentiment = getSentiment(stock.analysis);
-              return (
-                <div className="stock-analysis" key={stock.symbol}>
-                  <div className="stock-analysis-header">
-                    <div>
-                      <h3>{stock.symbol}</h3>
-                      <p>{stock.company}</p>
-                    </div>
-                    <div className="analysis-badges">
-                      <span className="analysis-quantity">Quantity: {stock.quantity}</span>
-                      <span
-                        className="sentiment-badge"
-                        style={{
-                          background: `${sentiment.color}22`,
-                          color: sentiment.color,
-                          borderColor: sentiment.color,
-                        }}
-                      >
-                        {sentiment.icon} {sentiment.label}
-                      </span>
-                    </div>
-                  </div>
-
-                  <TrustMeter stock={stock} />
-
-                  <div className="news-section">
-                    <h4>Recent News</h4>
-                    {stock.news && stock.news.length > 0 ? (
-                      stock.news.map((article, index) => (
-                        <div className="news-item" key={index}>
-                          <strong>{article.title}</strong>
-                          <small>{article.source} | {article.posted}</small>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="no-news">No recent news found.</p>
-                    )}
-                  </div>
-
-                  <div className="analysis-sections">
-                    {parsed && parsed.positive.length > 0 && (
-                      <div className="analysis-section positive-section">
-                        <h4 className="section-title positive-title">Positive Developments</h4>
-                        <ul className="section-list">
-                          {parsed.positive.map((item, idx) => (
-                            <li key={idx}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {parsed && parsed.concerns.length > 0 && (
-                      <div className="analysis-section concerns-section">
-                        <h4 className="section-title concerns-title">Potential Concerns</h4>
-                        <ul className="section-list">
-                          {parsed.concerns.map((item, idx) => (
-                            <li key={idx}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {parsed && parsed.impact && (
-                      <div className="analysis-section impact-section">
-                        <h4 className="section-title impact-title">Overall Impact</h4>
-                        <p className="impact-text">{parsed.impact}</p>
-                      </div>
-                    )}
-                    {(!parsed ||
-                      (!parsed.positive.length && !parsed.concerns.length && !parsed.impact)) && (
-                      <div className="analysis-section">
-                        <div className="analysis-content">
-                          {(stock.analysis || "")
-                            .replace(/\[INST\][\s\S]*?\[\/INST\]/g, "")
-                            .trim()
-                            .split("\n")
-                            .map((line, idx) => (
-                              <p key={idx}>{line}</p>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+        {tab === "alerts" && (
+          <div className="app-in">
+            <AlertsTab user={user} portfolio={portfolio} onLogin={() => setShowAuth("signin")} />
           </div>
         )}
-      </div>
+      </main>
 
-      </>
-      )}
-
-      {tab === "history" && (
-        <HistoryTab
-          user={user}
-          onView={viewFromHistory}
-          onLogin={() => setShowAuth("signin")}
-        />
-      )}
-
-      {tab === "alerts" && (
-        <AlertsTab
-          user={user}
-          portfolio={portfolio}
-          onLogin={() => setShowAuth("signin")}
-        />
-      )}
-
-      {/* Stock chart modal */}
+      {/* Modals */}
       {chartFor && <ChartModal stock={chartFor} onClose={() => setChartFor(null)} />}
-
-      {/* Sign in / Sign up modal */}
       {showAuth && (
         <AuthModal
           initialMode={showAuth}
@@ -949,6 +1030,15 @@ function App() {
           onSuccess={handleAuthSuccess}
         />
       )}
+
+      {/* Toasts */}
+      <div className="app-toasts">
+        {toasts.map((t) => (
+          <div key={t.id} className={`app-toast app-toast-${t.type}`}>
+            {t.message}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

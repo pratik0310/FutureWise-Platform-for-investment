@@ -1,0 +1,106 @@
+/* ============================================================
+   FUTUREWISE LOGO
+   Set --fw-ink on a parent to change the "FUTURE" colour
+   (light backgrounds: --fw-ink: #14161f).
+============================================================ */
+.app-logo {
+  --fw-deep: #d94800;
+  --fw-amber: #faa307;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  /* color: var(--fw-ink, #e8edf5); */
+  text-decoration: none;
+  line-height: 1;
+  border-radius: 12px;
+}
+.app-logo:focus-visible {
+  outline: 2px solid var(--fw-amber);
+  outline-offset: 4px;
+}
+
+/* ---------- mark ---------- */
+.fw-mark {
+  flex: none;
+  overflow: visible;
+  filter: drop-shadow(0 3px 8px rgba(217, 72, 0, 0.35));
+  transition: transform 0.35s cubic-bezier(0.3, 1.4, 0.5, 1), filter 0.3s;
+}
+.app-logo:hover .fw-mark {
+  transform: translateY(-2px) rotate(-4deg) scale(1.06);
+  filter: drop-shadow(0 10px 20px rgba(250, 163, 7, 0.5));
+}
+
+/* chart line draws itself on load, and again on hover */
+.fw-line {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 0;
+  animation: fw-draw 0.9s ease-out 0.15s both;
+}
+.app-logo:hover .fw-line {
+  animation: fw-redraw 0.8s ease-out both;
+}
+@keyframes fw-draw {
+  from { stroke-dashoffset: 100; }
+}
+@keyframes fw-redraw {
+  from { stroke-dashoffset: 100; }
+}
+
+.fw-arrow {
+  animation: fw-pop 0.3s ease-out 0.85s both;
+}
+@keyframes fw-pop {
+  from { opacity: 0; }
+}
+
+.fw-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fw-twinkle 3.4s ease-in-out 1.2s infinite;
+}
+@keyframes fw-twinkle {
+  0%, 100% { transform: scale(1) rotate(0); opacity: 1; }
+  50% { transform: scale(0.65) rotate(20deg); opacity: 0.7; }
+}
+
+/* ---------- wordmark ---------- */
+.app-logo-text {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.app-logo-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.12em;
+  font-family: var(--lp-head, "Bricolage Grotesque"), system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 0.14em;
+}
+.app-logo-wise {
+  background: linear-gradient(90deg, var(--fw-amber), var(--fw-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* letter-spacing leaves a gap after the last letter; keep the gradient tight to the glyphs */
+  padding-right: 0.14em;
+  margin-right: -0.14em;
+}
+.app-logo-tagline {
+  font-family: var(--lp-body, "IBM Plex Sans"), system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--fw-muted, #8a93a9);
+}
+
+@media (max-width: 480px) {
+  .app-logo-tagline { display: none; }
+  .app-logo-name { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fw-mark, .fw-line, .fw-arrow, .fw-spark { animation: none !important; transition: none !important; }
+}
