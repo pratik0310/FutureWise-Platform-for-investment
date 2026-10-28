@@ -5,3 +5,6 @@ stock_search/node_modules/
 .env.*
 !.env.example
 backend/.env
+node_modules/
+wa_auth/
+.env

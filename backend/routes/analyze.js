@@ -3,6 +3,7 @@ import axios from 'axios';
 import mongoose from 'mongoose';
 import Analysis from '../models/Analysis.js';
 import { sendAnalysisReport } from '../config/mailer.js';
+import { sendWhatsApp, buildAnalysisMessage } from '../config/whatsapp.js';
 import { sentimentScore } from '../config/sentiment.js';
 
 const router = express.Router();
@@ -184,6 +185,13 @@ router.post('/analyze', ensureAuthenticated, async (req, res) => {
     sendAnalysisReport(req.user, results).catch((e) =>
       console.error('Email failed:', e.message)
     );
+
+    // WhatsApp summary. Fire and forget. Only if user opted in.
+    if (req.user.whatsappOptIn && req.user.phone && Array.isArray(results) && results.length) {
+      sendWhatsApp(req.user.phone, buildAnalysisMessage(req.user, results)).catch((e) =>
+        console.error('WhatsApp failed:', e.message)
+      );
+    }
 
     res.json(response.data);
   } catch (error) {

@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import YahooFinance from 'yahoo-finance2';
 import Alert from '../models/Alert.js';
 import { sendPriceAlert } from '../config/mailer.js';
+import { sendWhatsApp, buildAlertMessage } from '../config/whatsapp.js';
 
 const router = express.Router();
 
@@ -50,7 +51,7 @@ export const checkAlerts = async () => {
   running = true;
   try {
     const active = await Alert.find({ status: 'active' })
-      .populate('userId', 'email displayName')
+      .populate('userId', 'email displayName phone whatsappOptIn')
       .lean();
     if (!active.length) return { checked: 0, triggered: 0 };
 
@@ -83,11 +84,24 @@ export const checkAlerts = async () => {
       );
       if (!claimed) continue;
 
-      try {
-        await sendPriceAlert(user, claimed, p.price, p.currency);
+      // Email always. WhatsApp too if user opted in.
+      // Revert to "active" only if EVERY channel failed (so no duplicate spam on partial success).
+      const jobs = [sendPriceAlert(user, claimed, p.price, p.currency)];
+      const names = ['email'];
+      if (user.whatsappOptIn && user.phone) {
+        jobs.push(sendWhatsApp(user.phone, buildAlertMessage(claimed, p.price, p.currency)));
+        names.push('WhatsApp');
+      }
+
+      const outcome = await Promise.allSettled(jobs);
+      outcome.forEach((o, i) => {
+        if (o.status === 'rejected')
+          console.error(`Alert ${names[i]} failed for ${a.symbol}:`, o.reason?.message);
+      });
+
+      if (outcome.some((o) => o.status === 'fulfilled')) {
         triggered++;
-      } catch (e) {
-        console.error(`Alert email failed for ${a.symbol}:`, e.message);
+      } else {
         // put it back so the next run retries
         await Alert.updateOne(
           { _id: a._id },
@@ -102,9 +116,9 @@ export const checkAlerts = async () => {
   }
 };
 
-// Local / always-on hosting: check every N minutes (ALERT_CHECK_MINUTES, default 5, 0 = off)
+// Local / always-on hosting: check every N minutes (ALERT_CHECK_MINUTES, default 1, 0 = off)
 export const startAlertScheduler = () => {
-  const mins = Number(process.env.ALERT_CHECK_MINUTES ?? 5);
+  const mins = Number(process.env.ALERT_CHECK_MINUTES ?? 1);
   if (!mins || mins < 0) return;
   setInterval(() => {
     checkAlerts().catch((e) => console.error('Alert check failed:', e.message));
